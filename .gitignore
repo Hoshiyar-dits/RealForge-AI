@@ -1,0 +1,19 @@
+# front-end is a separate project
+front-end/
+
+# secrets
+.env
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# runtime data (uploaded files and the vector store)
+uploads/
+chroma_db/
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
