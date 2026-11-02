@@ -1,38 +1,16 @@
-import os
-from langchain_chroma import Chroma
-from langchain_ollama import OllamaEmbeddings
-
-ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-embedding_model = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
-chroma_dir = os.getenv("CHROMA_DIR", "chroma_db")
-chroma_collection = os.getenv("CHROMA_COLLECTION", "product_knowledge")
-
-# created once when the app starts and shared by every request
-vector_store = Chroma(
-    collection_name=chroma_collection,
-    embedding_function=OllamaEmbeddings(model=embedding_model, base_url=ollama_base_url),
-    persist_directory=chroma_dir,
-    collection_metadata={"hnsw:space": "cosine"},
-)
-
 class KnowledgeRepository():
     def add(self, chunks, ids):
-        vector_store.add_documents(chunks, ids=ids)
+        # TODO: store the chunks in the vector store
+        pass
 
     def delete_by_document(self, document_id: int):
-        vector_store.delete(where={"document_id": document_id})
+        # TODO: delete the chunks of one document
+        pass
 
     def delete_by_product(self, product_id: int):
-        vector_store.delete(where={"product_id": product_id})
+        # TODO: delete the chunks of every document of a product
+        pass
 
     def search(self, query: str, k: int, doc_types: list = None, product_id: int = None):
-        # Chroma needs "$and" only when there are two conditions
-        if doc_types and product_id:
-            where = {"$and": [{"doc_type": {"$in": doc_types}}, {"product_id": product_id}]}
-        elif doc_types:
-            where = {"doc_type": {"$in": doc_types}}
-        elif product_id:
-            where = {"product_id": product_id}
-        else:
-            where = None
-        return vector_store.similarity_search(query, k=k, filter=where)
+        # TODO: return the k chunks closest in meaning to the query
+        return []
