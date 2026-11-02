@@ -5,7 +5,9 @@ from app.products.repository import ProductRepository
 from app.products.dto.CreateDocument import CreateDocument
 from app.knowledge.service import KnowledgeService
 from app.knowledge.repository import KnowledgeRepository
+from app.roles.repository import RoleRepository
 from app.auth.dto.MessageResponse import MessageResponse
+from app.products.dto.SearchResultResponse import SearchResultResponse
 import logging
 import os
 import uuid
@@ -13,6 +15,9 @@ import uuid
 upload_dir = os.getenv("UPLOAD_DIR", "uploads")
 max_upload_mb = int(os.getenv("MAX_UPLOAD_MB", "20"))
 allowed_extensions = {".pdf", ".txt", ".md", ".docx"}
+# repair guides are for technicians only; users without this permission never get their chunks
+repair_guide_permission = "assistant.technician"
+all_doc_types = ["manual", "repair_guide", "specification", "other"]
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +26,11 @@ class ProductService():
         self,
         repository: ProductRepository = Depends(),
         knowledge_service: KnowledgeService = Depends(),
+        role_repository: RoleRepository = Depends(),
     ):
         self.repository = repository
         self.knowledge_service = knowledge_service
+        self.role_repository = role_repository
 
     def create_product(self, data, files: List[UploadFile], current_user, background_tasks: BackgroundTasks):
         if self.repository.get_by_model_number(data.model_number):
@@ -70,6 +77,49 @@ class ProductService():
         self.repository.delete(product)
         self.knowledge_service.remove_product(product.id)
         return MessageResponse(message="Product deleted")
+
+    def list_documents(self, product_id: int):
+        product = self.get_product(product_id)
+        return self.repository.list_documents(product.id)
+
+    def get_document(self, product_id: int, document_id: int):
+        document = self.repository.get_document_by_id(document_id)
+        if not document or document.product_id != product_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+        return document
+
+    def reingest_document(self, product_id: int, document_id: int, background_tasks: BackgroundTasks):
+        document = self.get_document(product_id, document_id)
+        if document.ingest_status in ("pending", "processing"):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Document is already being ingested")
+        document = self.repository.reset_ingest(document)
+        background_tasks.add_task(ingest_in_background, document.id)
+        return document
+
+    def delete_document(self, product_id: int, document_id: int) -> MessageResponse:
+        document = self.get_document(product_id, document_id)
+        self.repository.delete_document(document)
+        self.knowledge_service.remove_document(document.id)
+        return MessageResponse(message="Document deleted")
+
+    def search_product(self, product_id: int, data, current_user):
+        product = self.get_product(product_id)
+        doc_types = all_doc_types
+        if repair_guide_permission not in self.role_repository.get_user_permission_names(current_user.id):
+            doc_types = [doc_type for doc_type in all_doc_types if doc_type != "repair_guide"]
+
+        results = self.knowledge_service.search_with_scores(data.query, data.k, doc_types, product.id)
+        return [
+            SearchResultResponse(
+                document_id=chunk.metadata["document_id"],
+                title=chunk.metadata["title"],
+                doc_type=chunk.metadata["doc_type"],
+                page=chunk.metadata.get("page"),
+                content=chunk.page_content,
+                score=round(score, 4),
+            )
+            for chunk, score in results
+        ]
 
     def check_files(self, files: List[UploadFile]):
         # check every file (type and size) before saving anything
@@ -121,25 +171,31 @@ class ProductService():
         if not product:
             return
 
+        self.repository.set_ingest_status(document, "processing")
+
         def on_page(pages_done: int, pages_total: int):
             self.repository.set_progress(document, pages_done, pages_total)
             # stop early when the document was replaced or deleted while it was being read
             if not self.repository.get_document_by_id(document.id):
                 raise ValueError("Document was replaced or deleted")
 
-        # a failed ingest is recorded on the document; upload the files again via product update to retry
+        # a failed ingest is recorded on the document; retry via POST /product/{id}/documents/{document_id}/ingest
         try:
             self.knowledge_service.ingest_document(document, product, on_page)
         except Exception:
             logger.exception("Ingest failed for document %s", document.id)
             self.repository.set_ingest_status(document, "failed")
             return
-        self.repository.set_ingest_status(document, "ingested")
+        # deleted after its last page was read: drop the vectors that were just added
+        if not self.repository.get_document_by_id(document.id):
+            self.knowledge_service.remove_document(document.id)
+            return
+        self.repository.set_ingest_status(document, "completed")
 
 def ingest_in_background(document_id: int):
     # runs after the response is sent, when the request's DB session is already closed, so it opens its own
     db = localSession()
     try:
-        ProductService(ProductRepository(db), KnowledgeService(KnowledgeRepository())).ingest(document_id)
+        ProductService(ProductRepository(db), KnowledgeService(KnowledgeRepository()), RoleRepository(db)).ingest(document_id)
     finally:
         db.close()

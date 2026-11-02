@@ -101,10 +101,23 @@ class ProductRepository():
             self.db.rollback()
             raise
 
+    def reset_ingest(self, document: Document):
+        try:
+            document.ingest_status = "pending"
+            document.ingested_at = None
+            document.pages_done = 0
+            document.pages_total = 0
+            self.db.commit()
+            self.db.refresh(document)
+            return document
+        except Exception:
+            self.db.rollback()
+            raise
+
     def set_ingest_status(self, document: Document, ingest_status: str):
         try:
             document.ingest_status = ingest_status
-            document.ingested_at = func.now() if ingest_status == "ingested" else None
+            document.ingested_at = func.now() if ingest_status == "completed" else None
             self.db.commit()
             self.db.refresh(document)
             return document

@@ -11,7 +11,7 @@ class Document(Base):
     file_path = Column(String(500), nullable=False)
     content_type = Column(String(100))
     file_size = Column(Integer)
-    ingest_status = Column(Enum("pending","ingested","failed"), nullable=False, default="pending")
+    ingest_status = Column(Enum("pending","processing","completed","failed"), nullable=False, default="pending")
     ingested_at = Column(TIMESTAMP)
     # ingest progress, shown in the front-end while the status is pending
     pages_done = Column(Integer, nullable=False, default=0, server_default="0")
