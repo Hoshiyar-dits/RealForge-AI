@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from app.roles.repository import RoleRepository
 from app.users.repository import UserRepository
+from app.roles.dto.UserAccessResponse import UserAccessResponse
 import os
 
 default_role = os.getenv("DEFAULT_ROLE", "user")
@@ -27,6 +28,13 @@ class RoleService():
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more roles not found")
         self.repository.sync_user_roles(user_id, data.role_ids)
         return self.repository.list_user_roles(user_id)
+
+    def get_user_access(self, user_id: int) -> UserAccessResponse:
+        return UserAccessResponse(
+            user_id=user_id,
+            roles=[role.name for role in self.repository.list_user_roles(user_id)],
+            permissions=sorted(self.repository.get_user_permission_names(user_id)),
+        )
 
     def assign_default_role(self, user):
         role = self.repository.get_role_by_name(default_role)
