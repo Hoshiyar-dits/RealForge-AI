@@ -7,17 +7,11 @@ from app.roles.service import RoleService
 from datetime import datetime, timedelta, timezone
 from app.auth.dto.LoginResponse import LoginResponse
 from app.auth.dto.MessageResponse import MessageResponse
-import os
+from app.database.config import algorithm, secret, expire_minutes, otp_expire_minutes, otp_max_attempts
 import hmac
 import hashlib
 import secrets
 import jwt
-
-algorithm = os.getenv("ALOGORITHM", "HS256")
-secret = os.getenv("JWT_SECRET_KEY")
-expire_minutes = int(os.getenv("ACCESS_TOKEN_EXPIRY", "60"))
-otp_expire_minutes = int(os.getenv("OTP_EXPIRY_MINUTES", "5"))
-otp_max_attempts = int(os.getenv("OTP_MAX_ATTEMPTS", "5"))
 
 if not secret:
     raise RuntimeError("JWT_SECRET_KEY is not set in the environment / .env")

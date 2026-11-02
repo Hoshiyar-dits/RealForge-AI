@@ -7,12 +7,7 @@ from langchain_community.document_loaders import Docx2txtLoader, PyPDFLoader, Te
 from langchain_core.documents import Document as Chunk
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.knowledge.repository import KnowledgeRepository
-
-chunk_size = int(os.getenv("RAG_CHUNK_SIZE", "1000"))
-chunk_overlap = int(os.getenv("RAG_CHUNK_OVERLAP", "150"))
-ocr_dpi = int(os.getenv("OCR_DPI", "300"))
-# pypdf stops at 2 million drawing instructions per page; print-ready PDFs (text drawn as shapes) need more
-pdf_parsing_limit = int(os.getenv("PDF_PARSING_LIMIT", "50000000"))
+from app.database.config import chunk_size, chunk_overlap, ocr_dpi, pdf_parsing_limit
 
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 

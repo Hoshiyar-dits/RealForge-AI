@@ -6,12 +6,11 @@ from app.products.dto.CreateDocument import CreateDocument
 from app.knowledge.service import KnowledgeService
 from app.knowledge.repository import KnowledgeRepository
 from app.auth.dto.MessageResponse import MessageResponse
+from app.database.config import upload_dir, max_upload_mb
 import logging
 import os
 import uuid
 
-upload_dir = os.getenv("UPLOAD_DIR", "uploads")
-max_upload_mb = int(os.getenv("MAX_UPLOAD_MB", "20"))
 allowed_extensions = {".pdf", ".txt", ".md", ".docx"}
 
 logger = logging.getLogger(__name__)

@@ -2,9 +2,7 @@ from fastapi import Depends, HTTPException, status
 from app.roles.repository import RoleRepository
 from app.users.repository import UserRepository
 from app.roles.dto.UserAccessResponse import UserAccessResponse
-import os
-
-default_role = os.getenv("DEFAULT_ROLE", "user")
+from app.database.config import default_role
 
 class RoleService():
     def __init__(self, repository: RoleRepository = Depends(), user_repository: UserRepository = Depends()):

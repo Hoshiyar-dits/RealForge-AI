@@ -53,7 +53,8 @@ app/
 - Classes are declared with empty parentheses: `class UserService():`, `class UserRepository():`.
 - snake_case for functions, methods, variables; PascalCase for classes; module-level constants lowercase (`algorithm`, `secret`, `otp_expire_minutes`).
 - Single blank line between methods; keep functions short and flat. Comments only where something is non-obvious.
-- Config values read with `os.getenv("NAME", "default")` at module level.
+- All config lives in `app/database/config.py` (loads `.env`, reads each value once with `os.getenv("NAME", "default")`).
+  Import values from there (`from app.database.config import smtp_host`); never call `os.getenv` / `load_dotenv` elsewhere.
 - Raise `HTTPException` from the **service** layer for business errors, using `status.HTTP_...` constants
   (e.g. `409` "Email already registered", `404` "... not found", `401` "Invalid or expired code").
 

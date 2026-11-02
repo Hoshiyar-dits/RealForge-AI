@@ -1,9 +1,9 @@
-import os
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 from app.database.database import get_db
+from app.database.config import secret, algorithm
 from app.users.models.users import User
 from app.roles.repository import RoleRepository
 
@@ -21,8 +21,8 @@ def get_current_user(
     try:
         payload = jwt.decode(
             credentials.credentials,
-            os.getenv("JWT_SECRET_KEY"),
-            algorithms=[os.getenv("ALOGORITHM", "HS256")],
+            secret,
+            algorithms=[algorithm],
         )
         user_id = int(payload["sub"])
     except (jwt.PyJWTError, KeyError, ValueError):

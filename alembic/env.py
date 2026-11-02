@@ -1,4 +1,3 @@
-import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
@@ -7,6 +6,7 @@ from sqlalchemy import pool
 from alembic import context
 
 from app.database.database import Base
+from app.database.config import db_url
 from app.users.models.users import User  # noqa: F401
 from app.auth.models.otp_codes import OtpCode  # noqa: F401
 from app.products.models.products import Product  # noqa: F401
@@ -19,7 +19,7 @@ from app.roles.models.user_roles import UserRole  # noqa: F401
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
-config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL").replace("%", "%%"))
+config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

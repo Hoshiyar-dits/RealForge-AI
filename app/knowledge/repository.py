@@ -1,11 +1,6 @@
-import os
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
-
-ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-embedding_model = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
-chroma_dir = os.getenv("CHROMA_DIR", "chroma_db")
-chroma_collection = os.getenv("CHROMA_COLLECTION", "product_knowledge")
+from app.database.config import ollama_base_url, embedding_model, chroma_dir, chroma_collection
 
 # created once when the app starts and shared by every request
 vector_store = Chroma(

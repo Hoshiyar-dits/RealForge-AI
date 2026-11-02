@@ -5,10 +5,7 @@ from app.auth.router import router as auth_router
 from app.products.router import router as product_router
 from app.roles.router import router as role_router
 from app.assistant.router import router as assistant_router
-import os
-
-# front-end addresses allowed to call this API from the browser, comma separated
-cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+from app.database.config import cors_origins
 
 app = FastAPI()
 

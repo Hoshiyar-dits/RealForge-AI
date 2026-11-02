@@ -1,4 +1,3 @@
-import os
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from langchain.agents import create_agent
@@ -10,12 +9,7 @@ from app.knowledge.service import KnowledgeService
 from app.products.repository import ProductRepository
 from app.assistant.dto.AskResponse import AskResponse
 from app.assistant.dto.SourceResponse import SourceResponse
-
-ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-chat_model = os.getenv("OLLAMA_CHAT_MODEL", "llama3.2")
-chat_num_ctx = int(os.getenv("OLLAMA_NUM_CTX", "8192"))
-retrieval_k = int(os.getenv("RAG_TOP_K", "5"))
-history_limit = int(os.getenv("CHAT_HISTORY_LIMIT", "10"))
+from app.database.config import ollama_base_url, chat_model, chat_num_ctx, retrieval_k, history_limit
 
 common_rules = """
 Rules:
