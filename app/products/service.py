@@ -41,6 +41,11 @@ class ProductService():
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
         return product
 
+    def get_product_with_documents(self, product_id: int):
+        product = self.get_product(product_id)
+        product.documents = self.repository.list_documents(product.id)
+        return product
+
     def update_product(self, product_id: int, data, files: List[UploadFile], current_user):
         product = self.get_product(product_id)
         if data.model_number and data.model_number != product.model_number:

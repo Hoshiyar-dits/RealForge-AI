@@ -19,7 +19,7 @@ def list_products(search: Optional[str] = None, model_number: Optional[str] = No
 
 @router.get("/{product_id}", response_model=ProductResponse)
 def get_product(product_id: int, service: ProductService = Depends(), current_user = Depends(require_permissions("product.view"))):
-    return service.get_product(product_id)
+    return service.get_product_with_documents(product_id)
 
 @router.patch("/{product_id}", response_model=ProductResponse)
 def update_product(product_id: int, data: Annotated[UpdateProduct, Form()], files: List[UploadFile] = File(default=[]), service: ProductService = Depends(), current_user = Depends(require_permissions("product.update"))):

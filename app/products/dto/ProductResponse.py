@@ -1,6 +1,7 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
+from app.products.dto.DocumentResponse import DocumentResponse
 
 class ProductResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -14,3 +15,5 @@ class ProductResponse(BaseModel):
     status: str
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
+    # filled only by GET /product/{id}
+    documents: List[DocumentResponse] = []
