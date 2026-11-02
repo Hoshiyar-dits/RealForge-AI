@@ -13,6 +13,9 @@ class Document(Base):
     file_size = Column(Integer)
     ingest_status = Column(Enum("pending","ingested","failed"), nullable=False, default="pending")
     ingested_at = Column(TIMESTAMP)
+    # ingest progress, shown in the front-end while the status is pending
+    pages_done = Column(Integer, nullable=False, default=0, server_default="0")
+    pages_total = Column(Integer, nullable=False, default=0, server_default="0")
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(TIMESTAMP, default=func.now())
     updated_at = Column(TIMESTAMP, default=func.now(), onupdate=func.now())

@@ -86,8 +86,20 @@ class ProductRepository():
             self.db.rollback()
             raise
 
+    def get_document_by_id(self, document_id: int):
+        return self.db.query(Document).filter(Document.id == document_id, Document.deleted_at.is_(None)).first()
+
     def list_documents(self, product_id: int):
         return self.db.query(Document).filter(Document.product_id == product_id, Document.deleted_at.is_(None)).order_by(Document.id.desc()).all()
+
+    def set_progress(self, document: Document, pages_done: int, pages_total: int):
+        try:
+            document.pages_done = pages_done
+            document.pages_total = pages_total
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
 
     def set_ingest_status(self, document: Document, ingest_status: str):
         try:

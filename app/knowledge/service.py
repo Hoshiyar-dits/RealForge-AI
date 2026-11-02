@@ -25,23 +25,25 @@ class KnowledgeService():
     def __init__(self, repository: KnowledgeRepository = Depends()):
         self.repository = repository
 
-    def load(self, file_path: str):
+    def load(self, file_path: str, on_page=None):
         extension = os.path.splitext(file_path)[1].lower()
         if extension == ".pdf":
-            return self.load_pdf(file_path)
+            return self.load_pdf(file_path, on_page)
         if extension == ".docx":
             return Docx2txtLoader(file_path).load()
         return TextLoader(file_path, autodetect_encoding=True).load()
 
-    def load_pdf(self, file_path: str):
+    def load_pdf(self, file_path: str, on_page=None):
         pages = PyPDFLoader(file_path).load()
         reader = PdfReader(file_path)
-        for page in pages:
-            if page.page_content.strip():
-                continue
-            # scanned page: it is only a picture, so read its text with the vision model
-            images = reader.pages[page.metadata["page"]].images
-            page.page_content = "\n".join(self.read_image(image.data) for image in images)
+        for number, page in enumerate(pages, start=1):
+            if not page.page_content.strip():
+                # scanned page: it is only a picture, so read its text with the vision model
+                images = reader.pages[page.metadata["page"]].images
+                page.page_content = "\n".join(self.read_image(image.data) for image in images)
+            # tell the caller how far we are, e.g. on_page(7, 38)
+            if on_page:
+                on_page(number, len(pages))
         return pages
 
     def read_image(self, image: bytes) -> str:
@@ -59,8 +61,8 @@ class KnowledgeService():
         ])
         return model.invoke([message]).text
 
-    def ingest_document(self, document, product):
-        chunks = text_splitter.split_documents(self.load(document.file_path))
+    def ingest_document(self, document, product, on_page=None):
+        chunks = text_splitter.split_documents(self.load(document.file_path, on_page))
 
         prepared = []
         ids = []

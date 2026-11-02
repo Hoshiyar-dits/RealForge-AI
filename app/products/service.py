@@ -1,8 +1,10 @@
 from typing import List
-from fastapi import Depends, HTTPException, UploadFile, status
+from fastapi import BackgroundTasks, Depends, HTTPException, UploadFile, status
+from app.database.database import localSession
 from app.products.repository import ProductRepository
 from app.products.dto.CreateDocument import CreateDocument
 from app.knowledge.service import KnowledgeService
+from app.knowledge.repository import KnowledgeRepository
 from app.auth.dto.MessageResponse import MessageResponse
 import logging
 import os
@@ -23,13 +25,13 @@ class ProductService():
         self.repository = repository
         self.knowledge_service = knowledge_service
 
-    def create_product(self, data, files: List[UploadFile], current_user):
+    def create_product(self, data, files: List[UploadFile], current_user, background_tasks: BackgroundTasks):
         if self.repository.get_by_model_number(data.model_number):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Model number already exists")
         self.check_files(files)
 
         product = self.repository.create(data)
-        self.add_documents(product, files, data.doc_type, current_user)
+        self.add_documents(product, files, data.doc_type, current_user, background_tasks)
         return product
 
     def list_products(self, search: str = None, model_number: str = None):
@@ -46,7 +48,7 @@ class ProductService():
         product.documents = self.repository.list_documents(product.id)
         return product
 
-    def update_product(self, product_id: int, data, files: List[UploadFile], current_user):
+    def update_product(self, product_id: int, data, files: List[UploadFile], current_user, background_tasks: BackgroundTasks):
         product = self.get_product(product_id)
         if data.model_number and data.model_number != product.model_number:
             if self.repository.get_by_model_number(data.model_number):
@@ -60,7 +62,7 @@ class ProductService():
             for document in self.repository.list_documents(product.id):
                 self.repository.delete_document(document)
                 self.knowledge_service.remove_document(document.id)
-            self.add_documents(product, files, data.doc_type, current_user)
+            self.add_documents(product, files, data.doc_type, current_user, background_tasks)
         return product
 
     def delete_product(self, product_id: int) -> MessageResponse:
@@ -75,8 +77,8 @@ class ProductService():
             self.read_upload(file)
             file.file.seek(0)
 
-    def add_documents(self, product, files: List[UploadFile], doc_type: str, current_user):
-        # save each file as a product document and add it to the vector store
+    def add_documents(self, product, files: List[UploadFile], doc_type: str, current_user, background_tasks: BackgroundTasks):
+        # save each file as a "pending" document; reading it into the vector store runs after the response is sent
         for file in files:
             title = os.path.splitext(file.filename or "")[0] or "Product document"
             data = CreateDocument(title=title[:255], doc_type=doc_type)
@@ -87,7 +89,7 @@ class ProductService():
             except Exception:
                 os.remove(file_path)
                 raise
-            self.ingest(document, product)
+            background_tasks.add_task(ingest_in_background, document.id)
 
     def read_upload(self, file: UploadFile):
         extension = os.path.splitext(file.filename or "")[1].lower()
@@ -113,11 +115,31 @@ class ProductService():
             f.write(content)
         return file_path
 
-    def ingest(self, document, product):
+    def ingest(self, document_id: int):
+        document = self.repository.get_document_by_id(document_id)
+        product = self.repository.get_by_id(document.product_id) if document else None
+        if not product:
+            return
+
+        def on_page(pages_done: int, pages_total: int):
+            self.repository.set_progress(document, pages_done, pages_total)
+            # stop early when the document was replaced or deleted while it was being read
+            if not self.repository.get_document_by_id(document.id):
+                raise ValueError("Document was replaced or deleted")
+
         # a failed ingest is recorded on the document; upload the files again via product update to retry
         try:
-            self.knowledge_service.ingest_document(document, product)
+            self.knowledge_service.ingest_document(document, product, on_page)
         except Exception:
             logger.exception("Ingest failed for document %s", document.id)
-            return self.repository.set_ingest_status(document, "failed")
-        return self.repository.set_ingest_status(document, "ingested")
+            self.repository.set_ingest_status(document, "failed")
+            return
+        self.repository.set_ingest_status(document, "ingested")
+
+def ingest_in_background(document_id: int):
+    # runs after the response is sent, when the request's DB session is already closed, so it opens its own
+    db = localSession()
+    try:
+        ProductService(ProductRepository(db), KnowledgeService(KnowledgeRepository())).ingest(document_id)
+    finally:
+        db.close()

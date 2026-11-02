@@ -20,8 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.drop_index(op.f('ix_user_permissions_user_id'), table_name='user_permissions')
-    op.drop_index(op.f('ix_user_permissions_permission_id'), table_name='user_permissions')
+    # dropping the table also drops its indexes; MySQL refuses to drop them first because the foreign keys use them
     op.drop_table('user_permissions')
 
 

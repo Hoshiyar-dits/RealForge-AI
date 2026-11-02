@@ -14,6 +14,8 @@ class DocumentResponse(BaseModel):
     file_size: Optional[int]
     ingest_status: str
     ingested_at: Optional[datetime]
+    pages_done: int
+    pages_total: int
     uploaded_by: int
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
