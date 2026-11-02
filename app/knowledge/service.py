@@ -1,25 +1,20 @@
 import os
-import io
-import base64
+import pytesseract
 from fastapi import Depends
-from PIL import Image
-from pypdf import PdfReader
+from pdf2image import convert_from_path
+from pypdf import apply_configuration
 from langchain_community.document_loaders import Docx2txtLoader, PyPDFLoader, TextLoader
 from langchain_core.documents import Document as Chunk
-from langchain_core.messages import HumanMessage
-from langchain_ollama import ChatOllama
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.knowledge.repository import KnowledgeRepository
 
 chunk_size = int(os.getenv("RAG_CHUNK_SIZE", "1000"))
 chunk_overlap = int(os.getenv("RAG_CHUNK_OVERLAP", "150"))
-ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-vision_model = os.getenv("OLLAMA_VISION_MODEL", "qwen2.5vl:3b")
-ocr_max_side = int(os.getenv("OCR_MAX_SIDE", "1280"))
+ocr_dpi = int(os.getenv("OCR_DPI", "300"))
+# pypdf stops at 2 million drawing instructions per page; print-ready PDFs (text drawn as shapes) need more
+pdf_parsing_limit = int(os.getenv("PDF_PARSING_LIMIT", "50000000"))
 
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-
-ocr_prompt = "Write out all the text in this image exactly as it appears, keeping headings, lists and tables. Only return the text."
 
 class KnowledgeService():
     def __init__(self, repository: KnowledgeRepository = Depends()):
@@ -34,32 +29,20 @@ class KnowledgeService():
         return TextLoader(file_path, autodetect_encoding=True).load()
 
     def load_pdf(self, file_path: str, on_page=None):
-        pages = PyPDFLoader(file_path).load()
-        reader = PdfReader(file_path)
+        with apply_configuration(stream_parsing_work_maximum_count=pdf_parsing_limit):
+            pages = PyPDFLoader(file_path).load()
         for number, page in enumerate(pages, start=1):
             if not page.page_content.strip():
-                # scanned page: it is only a picture, so read its text with the vision model
-                images = reader.pages[page.metadata["page"]].images
-                page.page_content = "\n".join(self.read_image(image.data) for image in images)
+                # no text on this page (a scan, or text drawn as shapes): draw the page as an image and OCR it
+                page.page_content = self.read_page_image(file_path, number)
             # tell the caller how far we are, e.g. on_page(7, 38)
             if on_page:
                 on_page(number, len(pages))
         return pages
 
-    def read_image(self, image: bytes) -> str:
-        # shrink big scans: a full-size page is too many tokens for the model and very slow on CPU
-        picture = Image.open(io.BytesIO(image)).convert("RGB")
-        picture.thumbnail((ocr_max_side, ocr_max_side))
-        buffer = io.BytesIO()
-        picture.save(buffer, format="PNG")
-
-        model = ChatOllama(model=vision_model, base_url=ollama_base_url, num_ctx=8192, temperature=0)
-        image_url = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
-        message = HumanMessage(content=[
-            {"type": "text", "text": ocr_prompt},
-            {"type": "image_url", "image_url": image_url},
-        ])
-        return model.invoke([message]).text
+    def read_page_image(self, file_path: str, page_number: int) -> str:
+        image = convert_from_path(file_path, dpi=ocr_dpi, first_page=page_number, last_page=page_number)[0]
+        return pytesseract.image_to_string(image)
 
     def ingest_document(self, document, product, on_page=None):
         chunks = text_splitter.split_documents(self.load(document.file_path, on_page))
