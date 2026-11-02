@@ -15,7 +15,6 @@ from app.roles.models.roles import Role  # noqa: F401
 from app.roles.models.permissions import Permission  # noqa: F401
 from app.roles.models.role_permissions import RolePermission  # noqa: F401
 from app.roles.models.user_roles import UserRole  # noqa: F401
-from app.roles.models.user_permissions import UserPermission  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

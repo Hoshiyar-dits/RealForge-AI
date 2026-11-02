@@ -215,9 +215,12 @@ Passwords are hashed with `pwdlib` (argon2) via `hash_password` / `verify_passwo
   `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_TLS`, `MAIL_FROM`). Inject it with `Depends()`; never call `smtplib` elsewhere.
 - JWT (PyJWT) payload: `{"sub": str(user.id), "exp": ...}`; secret `JWT_SECRET_KEY`, algorithm env `ALOGORITHM` (default `HS256`), expiry `ACCESS_TOKEN_EXPIRY` minutes. Build tokens only via `AuthService.create_token`.
 - Use `get_current_user` (in `app/auth/dependecies.py`) to protect routes; do not re-implement token decoding.
-- Authorization is permission-based RBAC (`app/roles/`): roles ↔ permissions, plus roles and direct permissions per user.
+- Authorization is permission-based RBAC (`app/roles/`): users → roles → permissions (no direct user permissions).
   Guard endpoints with `current_user = Depends(require_permissions("<resource>.<action>"))` (e.g. `product.view`), never by role name.
+  Roles and permissions are only created by the seeder — there is no API to create/update/delete them.
   New permissions go into `default_permissions` / `default_roles` in `app/seeders/roles_seeder.py`; run `python -m app.seeders.roles_seeder`.
+  The only role APIs are syncs (replace the whole set): `PUT /role/{role_id}/permissions` (`permission_ids`, `role.manage`)
+  and `PUT /user/{user_id}/roles` (`role_ids`, `user.manage`).
   Seeders live in `app/seeders/`. `python -m app.seeders` (or `app.seeders.admin_seeder`) seeds roles, then creates a verified default admin from the constants in
   `app/seeders/admin_seeder.py` (`admin_email`, `admin_password`, ...) and gives it the `admin` role.
 

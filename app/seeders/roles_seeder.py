@@ -1,9 +1,8 @@
 from app.database.database import localSession
 from app.roles.repository import RoleRepository
-from app.roles.dto.CreateRole import CreateRole
-from app.roles.dto.CreatePermission import CreatePermission
 
-# Idempotent: creates whatever is missing, never removes anything.
+# Seeds every role and permission. Idempotent: creates whatever is missing, never removes anything,
+# so changes made through the sync APIs are kept.
 # Run: python -m app.seeders.roles_seeder
 
 default_permissions = {
@@ -14,10 +13,9 @@ default_permissions = {
     "assistant.product": "Ask the product assistant about products and their features",
     "assistant.technician": "Ask the technician assistant about parts, how they work and repairs",
     "assistant.admin": "Ask the admin assistant about the whole catalog and knowledge base",
-    "user.manage": "List users and assign roles / permissions to them",
+    "user.manage": "List users and sync their roles",
     "technician.manage": "Add, update and delete technicians",
-    "role.manage": "Manage roles and their permissions",
-    "permission.manage": "Manage permissions",
+    "role.manage": "Sync the permissions of a role",
 }
 
 default_roles = {
@@ -32,11 +30,11 @@ def seed():
         repository = RoleRepository(db)
         permission_ids = {}
         for name, description in default_permissions.items():
-            permission = repository.get_permission_by_name(name) or repository.create_permission(CreatePermission(name=name, description=description))
+            permission = repository.get_permission_by_name(name) or repository.create_permission(name, description)
             permission_ids[name] = permission.id
 
         for name, (description, permissions) in default_roles.items():
-            role = repository.get_role_by_name(name) or repository.create_role(CreateRole(name=name, description=description))
+            role = repository.get_role_by_name(name) or repository.create_role(name, description)
             repository.add_role_permissions(role.id, [permission_ids[p] for p in permissions])
         print(f"Seeded {len(default_permissions)} permissions and {len(default_roles)} roles")
     finally:
