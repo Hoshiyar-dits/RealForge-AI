@@ -25,7 +25,7 @@ def get_current_user(
             algorithms=[algorithm],
         )
         user_id = int(payload["sub"])
-    except (jwt.PyJWTError, KeyError, ValueError):
+    except (jwt.PyJWTError, KeyError, ValueError, TypeError):
         raise unauthorized
 
     user = db.get(User, user_id)

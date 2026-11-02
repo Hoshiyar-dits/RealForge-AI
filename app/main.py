@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 from app.users.router import router as user_router
 from app.auth.router import router as auth_router
 from app.products.router import router as product_router
@@ -15,6 +18,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+logger = logging.getLogger(__name__)
+
+# a handler for a specific exception runs inside the CORS middleware, so the front-end gets a readable JSON error
+# instead of the plain 500 that FastAPI sends without CORS headers
+@app.exception_handler(SQLAlchemyError)
+def database_error(request: Request, exc: SQLAlchemyError):
+    logger.exception("Database error on %s %s", request.method, request.url.path, exc_info=exc)
+    return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"detail": "Database error, please try again"})
 
 app.include_router(user_router)
 app.include_router(auth_router)

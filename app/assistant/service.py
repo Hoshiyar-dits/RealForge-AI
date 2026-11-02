@@ -10,6 +10,9 @@ from app.products.repository import ProductRepository
 from app.assistant.dto.AskResponse import AskResponse
 from app.assistant.dto.SourceResponse import SourceResponse
 from app.database.config import ollama_base_url, chat_model, chat_num_ctx, retrieval_k, history_limit
+import logging
+
+logger = logging.getLogger(__name__)
 
 common_rules = """
 Rules:
@@ -77,6 +80,9 @@ class AssistantService():
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="AI model is unavailable; check that Ollama is running")
         except GraphRecursionError:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="The assistant could not finish answering; try rephrasing the question")
+        except Exception:
+            logger.exception("Assistant failed for role %s", role)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="The assistant failed to answer, please try again")
 
         return AskResponse(answer=answer, sources=list(sources.values()))
 

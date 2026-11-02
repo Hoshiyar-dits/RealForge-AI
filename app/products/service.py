@@ -30,7 +30,12 @@ class ProductService():
         self.check_files(files)
 
         product = self.repository.create(data)
-        self.add_documents(product, files, data.doc_type, current_user, background_tasks)
+        try:
+            self.add_documents(product, files, data.doc_type, current_user, background_tasks)
+        except Exception:
+            # don't leave a half-created product behind that blocks a retry with "Model number already exists"
+            self.repository.delete(product)
+            raise
         return product
 
     def list_products(self, search: str = None, model_number: str = None):
@@ -56,18 +61,21 @@ class ProductService():
 
         product = self.repository.update(product, data)
 
-        # new files replace all the old documents of the product
+        # new files replace all the old documents of the product;
+        # the old ones are removed only after the new ones are saved, so a failed upload loses nothing
         if files:
-            for document in self.repository.list_documents(product.id):
-                self.repository.delete_document(document)
-                self.knowledge_service.remove_document(document.id)
+            old_documents = self.repository.list_documents(product.id)
             self.add_documents(product, files, data.doc_type, current_user, background_tasks)
+            for document in old_documents:
+                self.knowledge_service.remove_document(document.id)
+                self.repository.delete_document(document)
         return product
 
     def delete_product(self, product_id: int) -> MessageResponse:
         product = self.get_product(product_id)
-        self.repository.delete(product)
+        # vectors first: if the knowledge base is down nothing changes, and a deleted product never shows up in answers
         self.knowledge_service.remove_product(product.id)
+        self.repository.delete(product)
         return MessageResponse(message="Product deleted")
 
     def check_files(self, files: List[UploadFile]):
@@ -86,7 +94,7 @@ class ProductService():
             try:
                 document = self.repository.create_document(product.id, data, file.filename, file_path, file.content_type, len(content), current_user.id)
             except Exception:
-                os.remove(file_path)
+                remove_file(file_path)
                 raise
             background_tasks.add_task(ingest_in_background, document.id)
 
@@ -108,10 +116,15 @@ class ProductService():
         return extension, content
 
     def store_file(self, extension: str, content: bytes) -> str:
-        os.makedirs(upload_dir, exist_ok=True)
         file_path = os.path.join(upload_dir, f"{uuid.uuid4().hex}{extension}")
-        with open(file_path, "wb") as f:
-            f.write(content)
+        try:
+            os.makedirs(upload_dir, exist_ok=True)
+            with open(file_path, "wb") as f:
+                f.write(content)
+        except OSError:
+            logger.exception("Saving upload to %s failed", file_path)
+            remove_file(file_path)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not save the uploaded file")
         return file_path
 
     def ingest(self, document_id: int):
@@ -135,10 +148,20 @@ class ProductService():
             return
         self.repository.set_ingest_status(document, "ingested")
 
+def remove_file(file_path: str):
+    # cleanup must not hide the error that triggered it
+    try:
+        os.remove(file_path)
+    except OSError:
+        pass
+
 def ingest_in_background(document_id: int):
     # runs after the response is sent, when the request's DB session is already closed, so it opens its own
     db = localSession()
     try:
         ProductService(ProductRepository(db), KnowledgeService(KnowledgeRepository())).ingest(document_id)
+    except Exception:
+        # nobody is waiting for this response, so log instead of raising
+        logger.exception("Background ingest crashed for document %s", document_id)
     finally:
         db.close()

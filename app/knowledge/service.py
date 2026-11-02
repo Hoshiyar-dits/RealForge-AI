@@ -1,6 +1,7 @@
+import logging
 import os
 import pytesseract
-from fastapi import Depends
+from fastapi import Depends, HTTPException, status
 from pdf2image import convert_from_path
 from pypdf import apply_configuration
 from langchain_community.document_loaders import Docx2txtLoader, PyPDFLoader, TextLoader
@@ -10,6 +11,8 @@ from app.knowledge.repository import KnowledgeRepository
 from app.database.config import chunk_size, chunk_overlap, ocr_dpi, pdf_parsing_limit
 
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+
+logger = logging.getLogger(__name__)
 
 class KnowledgeService():
     def __init__(self, repository: KnowledgeRepository = Depends()):
@@ -62,10 +65,18 @@ class KnowledgeService():
         self.repository.add(prepared, ids)
 
     def remove_document(self, document_id: int):
-        self.repository.delete_by_document(document_id)
+        try:
+            self.repository.delete_by_document(document_id)
+        except Exception:
+            logger.exception("Removing vectors failed for document %s", document_id)
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Knowledge base is unavailable, please try again")
 
     def remove_product(self, product_id: int):
-        self.repository.delete_by_product(product_id)
+        try:
+            self.repository.delete_by_product(product_id)
+        except Exception:
+            logger.exception("Removing vectors failed for product %s", product_id)
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Knowledge base is unavailable, please try again")
 
     def search(self, query: str, k: int, doc_types: list = None, product_id: int = None):
         return self.repository.search(query, k, doc_types, product_id)

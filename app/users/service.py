@@ -1,5 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from pwdlib import PasswordHash
+from pwdlib.exceptions import UnknownHashError
+from sqlalchemy.exc import IntegrityError
 from app.users.repository import UserRepository
 from app.roles.repository import RoleRepository
 from app.auth.dto.MessageResponse import MessageResponse
@@ -14,7 +16,11 @@ def hash_password(password: str) -> str:
     return password_hasher.hash(password)
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return password_hasher.verify(password, password_hash)
+    # a missing or malformed stored hash is a failed login, not a 500
+    try:
+        return password_hasher.verify(password, password_hash)
+    except (UnknownHashError, TypeError):
+        return False
 
 class UserService():
     def __init__(self, repository: UserRepository = Depends(), role_repository: RoleRepository = Depends()):
@@ -24,7 +30,11 @@ class UserService():
     def create_user(self, data):
         if self.repository.get_by_email(data.email):
             raise HTTPException(status_code=409, detail="Email already registered")
-        return self.repository.create(data, hash_password(data.password))
+        # the unique index also covers soft-deleted users and concurrent sign-ups, which the check above misses
+        try:
+            return self.repository.create(data, hash_password(data.password))
+        except IntegrityError:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
     def list_users(self):
         return self.repository.list()
@@ -54,7 +64,10 @@ class UserService():
         user = self.get_technician(user_id)
         if data.email != user.email and self.repository.get_by_email(data.email):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
-        return self.repository.update(user, data, hash_password(data.password))
+        try:
+            return self.repository.update(user, data, hash_password(data.password))
+        except IntegrityError:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
     def delete_technician(self, user_id: int) -> MessageResponse:
         user = self.get_technician(user_id)
