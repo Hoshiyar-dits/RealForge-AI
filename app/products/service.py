@@ -156,12 +156,12 @@ def remove_file(file_path: str):
         pass
 
 def ingest_in_background(document_id: int):
-    # runs after the response is sent, when the request's DB session is already closed, so it opens its own
-    db = localSession()
-    try:
-        ProductService(ProductRepository(db), KnowledgeService(KnowledgeRepository())).ingest(document_id)
-    except Exception:
-        # nobody is waiting for this response, so log instead of raising
-        logger.exception("Background ingest crashed for document %s", document_id)
-    finally:
-        db.close()
+    # runs after the response is sent, so it opens its own session; "with" closes it even on errors
+    with localSession() as db:
+        # Depends() doesn't work outside a request, so build the service by hand
+        knowledge_service = KnowledgeService(repository=KnowledgeRepository())
+        service = ProductService(repository=ProductRepository(db), knowledge_service=knowledge_service)
+        try:
+            service.ingest(document_id)
+        except Exception:
+            logger.exception("Background ingest failed for document %s", document_id)
