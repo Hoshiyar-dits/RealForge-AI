@@ -8,9 +8,31 @@ from app.auth.router import router as auth_router
 from app.products.router import router as product_router
 from app.roles.router import router as role_router
 from app.assistant.router import router as assistant_router
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.middleware import SlowAPIMiddleware
 from app.database.config import cors_origins
 
 app = FastAPI()
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["10/minute"]
+)
+
+# Register limiter
+app.state.limiter = limiter
+
+# Register 429 exception handler
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler
+)
+
+# Apply rate limiting globally
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
